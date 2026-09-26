@@ -1,7 +1,7 @@
 ### Lumir Sliva
 
 Senior Storage Engineer at [Seznam.cz](https://www.seznam.cz), Prague.
-I run and fix distributed storage: Ceph (RGW, mon, OSD, cephadm) on bare metal and on Kubernetes via Rook.
+I do stuff in the cloud. ☁️
 
 Upstream contributor to [Ceph](https://github.com/ceph/ceph/pulls?q=is%3Apr+author%3Alumir-sliva) and [Rook](https://github.com/rook/rook/pulls?q=is%3Apr+author%3Alumir-sliva).
 
