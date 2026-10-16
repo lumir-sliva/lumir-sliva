@@ -1,0 +1,42 @@
+name: profile
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+  # No paths filter: main is one commit that is amended and force-pushed, and
+  # GitHub does not fire a path-filtered push trigger for such a push.
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  actions: write   # the keepalive step below
+
+jobs:
+  header:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # GitHub disables scheduled workflows in a public repo after 60 days
+      # without activity, and main changes rarely. Re-enabling the workflow
+      # through the API every run keeps it on (the keepalive-workflow approach).
+      - name: Keep the schedule alive
+        run: gh api --method PUT "repos/${{ github.repository }}/actions/workflows/profile.yml/enable"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v5
+      # The seed defaults to the current UTC hour, so every hourly run rolls a
+      # new schedule of events.
+      - name: Generate header
+        run: python3 scripts/profile.py build --out dist --times
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_USER: ${{ github.repository_owner }}
+      - uses: crazy-max/ghaction-github-pages@1d6ee9b181a81033a16bd707a1401afa978daab4  # v5.0.0
+        with:
+          target_branch: output
+          build_dir: dist
+          jekyll: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
