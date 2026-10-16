@@ -1,0 +1,31 @@
+name: check
+
+# Nightly: many seeds against the live calendar, every variant and every
+# event kind. Publishes nothing; a failure is a bug the hourly build would
+# hit on some future seed.
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      seeds:
+        description: "seeds per variant"
+        type: number
+        default: 30
+
+permissions:
+  contents: read
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python3 scripts/profile.py check --seeds ${{ inputs.seeds || 30 }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_USER: ${{ github.repository_owner }}

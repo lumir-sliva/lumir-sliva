@@ -1,0 +1,87 @@
+name: profile
+
+on:
+  schedule:
+    # Two slots an hour: GitHub drops most scheduled slots under load, and a
+    # second run in the same UTC hour builds the same seed, so it is harmless.
+    - cron: "17,47 * * * *"
+  workflow_dispatch:
+    inputs:
+      event:
+        description: "use only this event kind (debugging)"
+        type: choice
+        default: any
+        options: [any, health, wall, shatter, octopus, osd, scrub, recover, upgrade]
+      seed:
+        description: "seed (default: the current UTC hour)"
+        type: string
+        default: ""
+  # No paths filter: main is one commit that is amended and force-pushed, and
+  # GitHub does not fire a path-filtered push trigger for such a push.
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  actions: write   # the keepalive step below
+
+# A push and the schedule can overlap; both publish `output`. Queue them
+# rather than cancel: a cancelled publish could leave a half-pushed branch.
+concurrency:
+  group: profile
+  cancel-in-progress: false
+
+jobs:
+  # A code change gets checked before it can publish; scheduled runs skip
+  # this (the code has not changed since the last push that passed).
+  check:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python3 scripts/profile.py check --seeds 3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_USER: ${{ github.repository_owner }}
+
+  header:
+    needs: check
+    if: ${{ !failure() && !cancelled() }}   # runs when check passed or was skipped
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # GitHub disables scheduled workflows in a public repo after 60 days
+      # without activity, and main changes rarely. Re-enabling the workflows
+      # through the API every run keeps them on (the keepalive-workflow approach).
+      - name: Keep the schedules alive
+        run: |
+          for wf in profile.yml check.yml; do
+            gh api --method PUT "repos/${{ github.repository }}/actions/workflows/$wf/enable"
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      # The seed defaults to the current UTC hour, so every run rolls a new
+      # schedule of events; a manual run may pin the seed or the event kind.
+      - name: Generate header
+        run: >
+          python3 scripts/profile.py build --out dist --times
+          ${{ inputs.event && inputs.event != 'any' && format('--event {0}', inputs.event) || '' }}
+          ${{ inputs.seed && format('--seed {0}', inputs.seed) || '' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_USER: ${{ github.repository_owner }}
+      - uses: crazy-max/ghaction-github-pages@1d6ee9b181a81033a16bd707a1401afa978daab4  # v5.0.0
+        with:
+          target_branch: output
+          build_dir: dist
+          jekyll: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
